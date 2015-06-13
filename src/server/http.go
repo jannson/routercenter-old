@@ -46,10 +46,7 @@ func serveHome(s *ServerHttpd, w http.ResponseWriter, r *http.Request) (int, err
 	//w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	//homeTempl.Execute(w, r.Host)
 
-	io.WriteString(w, "<html>contentstorage home<br/>")
-	io.WriteString(w, "<a href='/static/test1.html' target='_blank'>core emulator</a><br/>")
-	io.WriteString(w, "<a href='/static/uploadtest.html' target='_blank'>image upload test</a><br/>")
-	io.WriteString(w, "<a href='/static/audiotest.html' target='_blank'>audio upload test</a><br/>")
+	io.WriteString(w, "<html>Hello<br/>")
 	io.WriteString(w, "</html>")
 
 	return 200, nil
