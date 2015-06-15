@@ -6,13 +6,15 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 )
-
-var httpdGlobal *ServerHttpd
 
 type ServerHttpd struct {
 	context *ServerContext
+	session *sessions.CookieStore
 }
+
+var httpdGlobal *ServerHttpd
 
 func GetHttpdGlobal() *ServerHttpd {
 	return httpdGlobal
@@ -55,11 +57,12 @@ func serveHome(s *ServerHttpd, w http.ResponseWriter, r *http.Request) (int, err
 func StartServer(c *ServerContext) {
 	addr := fmt.Sprintf("%s:%d", c.Config.System.Host, c.Config.System.Port)
 	router := mux.NewRouter()
-	httpd := &ServerHttpd{context: c}
+	httpd := &ServerHttpd{context: c, session: sessions.NewCookieStore([]byte("something-very-secret"))}
 	httpdGlobal = httpd
 
 	router.Handle("/", appHandler{httpd, serveHome}).Methods("GET")
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./statics/"))))
+	router.Handle("/mainchannel", appHandler{httpd, serveMainChannel})
 
 	http.Handle("/", router)
 
