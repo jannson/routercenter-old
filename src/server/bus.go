@@ -69,9 +69,14 @@ func (bus *MessageBus) Run() {
 				el := l.Front()
 				obj := el.Value.(SeqMessage)
 				if obj.GetExpred().Before(now.Add(1 * time.Microsecond)) {
-					//Timeout
+					//Timeout, remove from list
 					l.Remove(el)
 					obj.SetEl(nil)
+
+					//remove from seqmap
+					bus.seqMap.DelSeq(obj.GetRequestId())
+
+					//Fire to response
 					obj.(SeqMessage).Fire(MessageEventTimeout)
 				} else {
 					//Not timeout

@@ -1,27 +1,96 @@
 package rcenter
 
-import "github.com/gorilla/websocket"
+import (
+	"errors"
+
+	"github.com/gorilla/websocket"
+)
 
 type UserConn struct {
-	ws      *websocket.Conn
-	lanAddr string
-	lanPort string
-	proto   string
+	ws       *websocket.Conn
+	u        string
+	key      string
+	lanAddr  string
+	lanPort  string
+	proto    string
+	writeMsg chan *Message
+}
+
+type DeviceConn struct {
+	u        string
+	deviceId string
+	mainWs   *websocket.Conn
+	wsMap    map[string]*UserConn
+	writeMsg chan *Message
 }
 
 type User struct {
 	bus    *MessageBus
 	name   string
 	pass   string
-	mainWs *websocket.Conn
-	wsMap  map[string]*UserConn
+	devMap map[string]*DeviceConn
 }
 
 func NewUser(bus *MessageBus, name string, pass string) *User {
-	return &User{bus, name, pass, nil, make(map[string]*UserConn)}
+	return &User{bus, name, pass, make(map[string]*DeviceConn)}
 }
 
-func (user *User) requestControl(msg SeqMessage) *Message {
+func (user *User) RegistDevice(ws *websocket.Conn, dev string) {
+	if old, ok := user.devMap[dev]; ok {
+		old.mainWs.Close()
+	}
+
+	user.devMap[dev] = &DeviceConn{deviceId: dev, mainWs: ws, wsMap: make(map[string]*UserConn)}
+}
+
+func (user *User) UnregistDevice(deviceId string) error {
+	if dev, ok := user.devMap[deviceId]; ok {
+		dev.mainWs.Close()
+		for k, v := range dev.wsMap {
+			v.ws.Close()
+			delete(dev.wsMap, k)
+		}
+
+		delete(user.devMap, deviceId)
+		return nil
+	} else {
+		return errors.New("not found")
+	}
+}
+
+func (user *User) RegistConn(conn *UserConn, deviceId string) error {
+	if dev, ok := user.devMap[deviceId]; ok {
+		if _, ok2 := dev.wsMap[conn.key]; ok2 {
+			return errors.New("exists old conn")
+		}
+		dev.wsMap[conn.key] = conn
+		return nil
+	} else {
+		return errors.New("device not found")
+	}
+}
+
+func (user *User) UnregistConn(key string, deviceId string) error {
+	if dev, ok := user.devMap[deviceId]; ok {
+		if conn, ok2 := dev.wsMap[key]; ok2 {
+			delete(dev.wsMap, key)
+			conn.ws.Close()
+			return nil
+		}
+	}
+
+	return errors.New("conn not found")
+}
+
+func (user *User) RequestControl(msg *PMessage) *Message {
 	user.bus.seqMsg <- msg
-	return nil
+
+	//wait for response
+	resp := <-msg.resp
+
+	if resp.mType == PROTO_TYPE_ERROR {
+		return nil
+	}
+
+	return resp
 }

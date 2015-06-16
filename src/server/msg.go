@@ -12,13 +12,24 @@ const (
 	MessageType
 )
 
+type MessageHeader struct {
+	magic  uint32
+	proto  uint8
+	mType  uint8
+	seq    uint16
+	unuse  uint32
+	length uint32
+}
+
 type Message struct {
 	magic  uint32
 	proto  uint8
 	mType  uint8
 	seq    uint16
+	unuse  uint32
 	length uint32
-	msg    []byte
+
+	msg []byte
 }
 
 type SeqMessage interface {

@@ -17,9 +17,18 @@ var errMessage = &Message{
 
 type PMessage struct {
 	Message
-	el      *list.Element
-	expired time.Time
-	resp    chan *Message
+	el       *list.Element
+	expired  time.Time
+	deviceId string
+	resp     chan *Message
+}
+
+func NewPMessage(dev string) *PMessage {
+	return &PMessage{el: nil, deviceId: dev, resp: make(chan *Message)}
+}
+
+func (m *PMessage) Release() {
+	close(m.resp)
 }
 
 func (m *PMessage) PutResp(resp *Message) {

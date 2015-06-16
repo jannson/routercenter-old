@@ -12,6 +12,8 @@ import (
 type ServerHttpd struct {
 	context *ServerContext
 	session *sessions.CookieStore
+	bus     *MessageBus
+	users   map[string]*User
 }
 
 var httpdGlobal *ServerHttpd
@@ -57,12 +59,12 @@ func serveHome(s *ServerHttpd, w http.ResponseWriter, r *http.Request) (int, err
 func StartServer(c *ServerContext) {
 	addr := fmt.Sprintf("%s:%d", c.Config.System.Host, c.Config.System.Port)
 	router := mux.NewRouter()
-	httpd := &ServerHttpd{context: c, session: sessions.NewCookieStore([]byte("something-very-secret"))}
+	httpd := &ServerHttpd{context: c, session: sessions.NewCookieStore([]byte("something-very-secret-heihei")), bus: NewMessageBus()}
 	httpdGlobal = httpd
 
 	router.Handle("/", appHandler{httpd, serveHome}).Methods("GET")
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./statics/"))))
-	router.Handle("/mainchannel", appHandler{httpd, serveMainChannel})
+	router.Handle("/__main", appHandler{httpd, serveMainChannel})
 
 	http.Handle("/", router)
 
