@@ -88,7 +88,7 @@ func (user *User) RequestControl(msg *PMessage) *Message {
 	//wait for response
 	resp := <-msg.resp
 
-	if resp.mType == PROTO_TYPE_ERROR {
+	if resp.MType == PROTO_TYPE_ERROR {
 		return nil
 	}
 

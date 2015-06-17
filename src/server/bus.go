@@ -53,9 +53,9 @@ func (bus *MessageBus) Run() {
 			}
 
 		case resp := <-bus.resp:
-			data := bus.seqMap.GetData(int(resp.seq))
+			data := bus.seqMap.GetData(int(resp.Seq))
 			if data != nil {
-				bus.seqMap.DelSeq(int(resp.seq))
+				bus.seqMap.DelSeq(int(resp.Seq))
 				seqMsg := data.(SeqMessage)
 				seqMsg.PutResp(resp)
 				//seqMsg.Fire(MessageEventOk)

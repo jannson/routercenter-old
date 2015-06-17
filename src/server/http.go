@@ -64,7 +64,7 @@ func StartServer(c *ServerContext) {
 
 	router.Handle("/", appHandler{httpd, serveHome}).Methods("GET")
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./statics/"))))
-	router.Handle("/__main", appHandler{httpd, serveMainChannel})
+	router.Handle("/__main_channel", appHandler{httpd, serveMainChannel})
 
 	http.Handle("/", router)
 

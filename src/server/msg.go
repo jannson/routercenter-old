@@ -13,21 +13,16 @@ const (
 )
 
 type MessageHeader struct {
-	magic  uint32
-	proto  uint8
-	mType  uint8
-	seq    uint16
-	unuse  uint32
-	length uint32
+	Magic  uint32
+	Proto  uint8
+	MType  uint8
+	Seq    uint16
+	Unuse  uint32
+	Length uint32
 }
 
 type Message struct {
-	magic  uint32
-	proto  uint8
-	mType  uint8
-	seq    uint16
-	unuse  uint32
-	length uint32
+	MessageHeader
 
 	msg []byte
 }
@@ -45,9 +40,9 @@ type SeqMessage interface {
 }
 
 func (m *Message) GetRequestId() int {
-	return int(m.seq)
+	return int(m.Seq)
 }
 
 func (m *Message) SetRequestId(seq int) {
-	m.seq = uint16(seq)
+	m.Seq = uint16(seq)
 }

@@ -12,7 +12,15 @@ const (
 )
 
 var errMessage = &Message{
-	mType: PROTO_TYPE_ERROR,
+	MessageHeader{
+		Magic:  PROTO_MAGIC,
+		Proto:  0,
+		Seq:    0,
+		Unuse:  0,
+		Length: 0,
+		MType:  PROTO_TYPE_ERROR,
+	},
+	nil,
 }
 
 type PMessage struct {
