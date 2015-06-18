@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 )
 
 type ServerHttpd struct {
+	sync.RWMutex
 	context *ServerContext
 	session *sessions.CookieStore
 	bus     *MessageBus
@@ -59,7 +61,7 @@ func serveHome(s *ServerHttpd, w http.ResponseWriter, r *http.Request) (int, err
 func StartServer(c *ServerContext) {
 	addr := fmt.Sprintf("%s:%d", c.Config.System.Host, c.Config.System.Port)
 	router := mux.NewRouter()
-	httpd := &ServerHttpd{context: c, session: sessions.NewCookieStore([]byte("something-very-secret-heihei")), bus: NewMessageBus()}
+	httpd := &ServerHttpd{context: c, session: sessions.NewCookieStore([]byte("something-very-secret-heihei")), bus: NewMessageBus(), users: make(map[string]*User)}
 	httpdGlobal = httpd
 
 	router.Handle("/", appHandler{httpd, serveHome}).Methods("GET")

@@ -21,6 +21,16 @@ type MessageHeader struct {
 	Length uint32
 }
 
+//TODO do better hear
+type MsgHandshake struct {
+	Ulen     int32
+	Plen     int32
+	Dlen     int32
+	Username [32]byte
+	Pass     [32]byte
+	DeviceId [32]byte
+}
+
 type Message struct {
 	MessageHeader
 

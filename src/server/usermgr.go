@@ -13,7 +13,7 @@ type UserConn struct {
 	lanAddr  string
 	lanPort  string
 	proto    string
-	writeMsg chan *Message
+	writeMsg chan []byte
 }
 
 type DeviceConn struct {
@@ -21,7 +21,7 @@ type DeviceConn struct {
 	deviceId string
 	mainWs   *websocket.Conn
 	wsMap    map[string]*UserConn
-	writeMsg chan *Message
+	writeMsg chan []byte
 }
 
 type User struct {
@@ -35,12 +35,12 @@ func NewUser(bus *MessageBus, name string, pass string) *User {
 	return &User{bus, name, pass, make(map[string]*DeviceConn)}
 }
 
-func (user *User) RegistDevice(ws *websocket.Conn, dev string) {
-	if old, ok := user.devMap[dev]; ok {
+func (user *User) RegistDevice(dev *DeviceConn) {
+	if old, ok := user.devMap[dev.deviceId]; ok {
 		old.mainWs.Close()
 	}
 
-	user.devMap[dev] = &DeviceConn{deviceId: dev, mainWs: ws, wsMap: make(map[string]*UserConn)}
+	user.devMap[dev.deviceId] = dev
 }
 
 func (user *User) UnregistDevice(deviceId string) error {
