@@ -9,6 +9,8 @@ const (
 	PROTO_MAGIC      uint32 = 0x10293874
 	PROTO_PROTO_MAIN uint8  = 0x1
 	PROTO_TYPE_ERROR uint8  = 0xFF
+	PROTO_TYPE_REQ   uint8  = 0x3
+	PROTO_TYPE_RESP  uint8  = 0x4
 )
 
 var errMessage = &Message{
@@ -25,14 +27,22 @@ var errMessage = &Message{
 
 type PMessage struct {
 	Message
-	el       *list.Element
-	expired  time.Time
-	deviceId string
-	resp     chan *Message
+	el             *list.Element
+	expired        time.Time
+	deviceId       string
+	processHandler func(*PMessage) error
+	resp           chan *Message
 }
 
 func NewPMessage(dev string) *PMessage {
-	return &PMessage{el: nil, deviceId: dev, resp: make(chan *Message)}
+	p := &PMessage{el: nil, deviceId: dev, resp: make(chan *Message)}
+	p.Magic = PROTO_MAGIC
+	p.Proto = 1
+	p.Unuse = 0
+	p.Length = 0
+	p.MType = PROTO_TYPE_REQ
+
+	return p
 }
 
 func (m *PMessage) Release() {
@@ -63,6 +73,10 @@ func (m *PMessage) GetEl() *list.Element {
 	return m.el
 }
 
-func (m *PMessage) Fire(event int) {
-	m.resp <- errMessage
+func (m *PMessage) Fire(event int, arg interface{}) {
+	if event != MessageEventOk {
+		m.resp <- errMessage
+	} else {
+		m.processHandler(m)
+	}
 }

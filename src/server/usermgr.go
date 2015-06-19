@@ -22,6 +22,7 @@ type DeviceConn struct {
 	mainWs   *websocket.Conn
 	wsMap    map[string]*UserConn
 	writeMsg chan []byte
+	isClosed bool
 }
 
 type User struct {
@@ -82,7 +83,27 @@ func (user *User) UnregistConn(key string, deviceId string) error {
 	return errors.New("conn not found")
 }
 
-func (user *User) RequestControl(msg *PMessage) *Message {
+func (user *User) RequestControl(deviceId string, msg *PMessage) *Message {
+	s := GetHttpdGlobal()
+	msg.processHandler = func(m *PMessage) error {
+		lock := true
+		defer func() {
+			if lock {
+				s.RUnlock()
+			}
+		}()
+		s.RLock()
+
+		if devConn, ok := user.devMap[deviceId]; ok {
+			s.RUnlock()
+			lock = false
+			devConn.writeMsg <- m.GetData().ToBytes()
+			return nil
+		} else {
+			return errors.New("device not found")
+		}
+	}
+
 	user.bus.seqMsg <- msg
 
 	//wait for response

@@ -3,6 +3,7 @@ package rcenter
 import (
 	"container/list"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -49,8 +50,18 @@ func (bus *MessageBus) Run() {
 			oldData := bus.seqMap.NewSeq(m)
 			if oldData != nil {
 				fmt.Printf("FIXME: oldData is not null\n")
-				oldData.(SeqMessage).Fire(MessageEventErr)
+				oldData.(SeqMessage).Fire(MessageEventErr, nil)
 			}
+			now := time.Now()
+			m.SetExpired(now.Add(expiredDuration))
+			m.SetEl(l.PushBack(m))
+
+			if bus.nextTick.After(m.GetExpred()) {
+				bus.nextTick = m.GetExpred()
+				bus.timer.Reset(bus.nextTick.Sub(now))
+			}
+
+			m.Fire(MessageEventOk, nil)
 
 		case resp := <-bus.resp:
 			data := bus.seqMap.GetData(int(resp.Seq))
@@ -58,7 +69,6 @@ func (bus *MessageBus) Run() {
 				bus.seqMap.DelSeq(int(resp.Seq))
 				seqMsg := data.(SeqMessage)
 				seqMsg.PutResp(resp)
-				//seqMsg.Fire(MessageEventOk)
 			} else {
 				fmt.Printf("data not find in seqmap\n")
 			}
@@ -77,12 +87,18 @@ func (bus *MessageBus) Run() {
 					bus.seqMap.DelSeq(obj.GetRequestId())
 
 					//Fire to response
-					obj.(SeqMessage).Fire(MessageEventTimeout)
+					obj.(SeqMessage).Fire(MessageEventTimeout, nil)
 				} else {
 					//Not timeout
 					bus.nextTick = l.Front().Value.(SeqMessage).GetExpred()
 					bus.timer.Reset(bus.nextTick.Sub(now))
 				}
+			}
+
+			if 0 == l.Len() {
+				log.Println("all zero")
+				bus.nextTick = time.Now().Add(maxDuration)
+				bus.timer.Reset(bus.nextTick.Sub(now))
 			}
 		}
 	}

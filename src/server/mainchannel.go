@@ -44,13 +44,18 @@ var upgrader = websocket.Upgrader{
 }
 
 func (devConn *DeviceConn) Close(s *ServerHttpd) {
-	devConn.mainWs.Close()
-	close(devConn.writeMsg)
-
 	s.Lock()
 	defer func() {
 		s.Unlock()
 	}()
+
+	if devConn.isClosed {
+		return
+	}
+	devConn.isClosed = true
+
+	devConn.mainWs.Close()
+	close(devConn.writeMsg)
 
 	if len(devConn.u) > 0 {
 		if userMgr, ok := s.users[devConn.u]; ok {
@@ -78,12 +83,29 @@ func (devConn *DeviceConn) writePump(s *ServerHttpd) {
 	for {
 		select {
 		case msg := <-devConn.writeMsg:
+			log.Println("begin write back message", len(msg))
 			err := devConn.write(websocket.BinaryMessage, msg)
 			if nil != err {
+				log.Println("write message error ", err.Error())
 				return
 			}
 			break
 		}
+	}
+}
+
+func (devConn *DeviceConn) registDev(s *ServerHttpd, user string, pass string) {
+	defer func() {
+		s.Unlock()
+	}()
+	s.Lock()
+
+	if usrMgr, ok := s.users[user]; ok {
+		usrMgr.RegistDevice(devConn)
+	} else {
+		usrMgr = NewUser(s.bus, user, pass)
+		s.users[user] = usrMgr
+		usrMgr.RegistDevice(devConn)
 	}
 }
 
@@ -101,65 +123,49 @@ func (devConn *DeviceConn) readPump(s *ServerHttpd) {
 		return nil
 	})
 
-	b := make([]byte, maxMessageSize)
 	for {
-		log.Println("begin nextRead")
-		_, reader, err := devConn.mainWs.NextReader()
+		_, b, err := devConn.mainWs.ReadMessage()
 		if err != nil {
-			s.context.Logger.Info("newReader error %v\n", err)
+			s.context.Logger.Info("read message error %v\n", err)
 			break
+		}
+
+		var mHeader MessageHeader
+		if len(b) < int(unsafe.Sizeof(mHeader)) {
+			s.context.Logger.Error("ignore error package %v\n", err)
+			continue
+		}
+
+		//parse message header
+		buf := bytes.NewBuffer(b)
+		//dec := gob.NewDecoder(buffer)
+		if nil != binary.Read(buf, binary.BigEndian, &mHeader) {
+			s.context.Logger.Error("error read header %v\n", err)
+			continue
+		}
+
+		if mHeader.Proto == 1 && mHeader.MType == Handshake {
+			var handshake MsgHandshake
+			if nil != binary.Read(buf, binary.BigEndian, &handshake) {
+				s.context.Logger.Error("error read info %v\n", err)
+				continue
+			}
+			user := string(handshake.Username[:handshake.Ulen])
+			pass := string(handshake.Pass[:handshake.Plen])
+			deviceId := string(handshake.DeviceId[:handshake.Dlen])
+			devConn.u = user
+			devConn.deviceId = deviceId
+			devConn.registDev(s, user, pass)
+
+			mHeader.MType = HandshakeOk
+			var buf2 bytes.Buffer
+			writer := bufio.NewWriter(&buf2)
+			binary.Write(writer, binary.BigEndian, &mHeader)
+			writer.Flush()
+			devConn.writeMsg <- buf2.Bytes()
 		} else {
-			length, err := reader.Read(b)
-			if err != nil {
-				s.context.Logger.Info("read message error %v\n", err)
-				break
-			}
-
-			var mHeader MessageHeader
-			if length < int(unsafe.Sizeof(mHeader)) {
-				s.context.Logger.Error("ignore error package %v\n", err)
-				continue
-			}
-
-			//parse message header
-			buf := bytes.NewBuffer(b)
-			//dec := gob.NewDecoder(buffer)
-			if nil != binary.Read(buf, binary.BigEndian, &mHeader) {
-				s.context.Logger.Error("error read header %v\n", err)
-				continue
-			}
-
-			if mHeader.Proto == 1 && mHeader.MType == Handshake {
-				var handshake MsgHandshake
-				if nil != binary.Read(buf, binary.BigEndian, &handshake) {
-					s.context.Logger.Error("error read info %v\n", err)
-					continue
-				}
-				user := string(handshake.Username[:handshake.Ulen])
-				pass := string(handshake.Pass[:handshake.Plen])
-				deviceId := string(handshake.DeviceId[:handshake.Dlen])
-				devConn.u = user
-				devConn.deviceId = deviceId
-
-				mHeader.MType = HandshakeOk
-				var buf2 bytes.Buffer
-				binary.Write(bufio.NewWriter(&buf2), binary.BigEndian, &mHeader)
-
-				s.Lock()
-				defer func() {
-					s.Unlock()
-				}()
-
-				if usrMgr, ok := s.users[user]; ok {
-					usrMgr.RegistDevice(devConn)
-				} else {
-					usrMgr = NewUser(s.bus, user, pass)
-					s.users[user] = usrMgr
-					usrMgr.RegistDevice(devConn)
-				}
-
-				devConn.writeMsg <- buf2.Bytes()
-			}
+			msg := &Message{mHeader, b[int(unsafe.Sizeof(mHeader)):]}
+			s.bus.resp <- msg
 		}
 
 	}
@@ -174,7 +180,7 @@ func serveMainChannel(s *ServerHttpd, w http.ResponseWriter, r *http.Request) (i
 	}
 	s.context.Logger.Info("Got new connection\n")
 
-	devConn := &DeviceConn{mainWs: ws, wsMap: make(map[string]*UserConn), writeMsg: make(chan []byte, 100)}
+	devConn := &DeviceConn{mainWs: ws, wsMap: make(map[string]*UserConn), writeMsg: make(chan []byte, 100), isClosed: false}
 	go devConn.writePump(s)
 	devConn.readPump(s)
 

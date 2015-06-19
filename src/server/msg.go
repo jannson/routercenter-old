@@ -1,12 +1,15 @@
 package rcenter
 
 import (
+	"bufio"
+	"bytes"
 	"container/list"
+	"encoding/binary"
 	"time"
 )
 
 const (
-	//	MessageEventOk      int = 0
+	MessageEventOk      int = 0
 	MessageEventErr     int = 1
 	MessageEventTimeout int = 2
 	MessageType
@@ -31,6 +34,11 @@ type MsgHandshake struct {
 	DeviceId [32]byte
 }
 
+type MsgTunnel struct {
+	lanAddr uint32
+	lanPort uint32
+}
+
 type Message struct {
 	MessageHeader
 
@@ -46,7 +54,7 @@ type SeqMessage interface {
 	GetExpred() time.Time
 	SetEl(*list.Element)
 	GetEl() *list.Element
-	Fire(event int)
+	Fire(event int, arg interface{})
 }
 
 func (m *Message) GetRequestId() int {
@@ -55,4 +63,13 @@ func (m *Message) GetRequestId() int {
 
 func (m *Message) SetRequestId(seq int) {
 	m.Seq = uint16(seq)
+}
+
+func (m *Message) ToBytes() []byte {
+	var buf bytes.Buffer
+	writer := bufio.NewWriter(&buf)
+	binary.Write(writer, binary.BigEndian, &m.MessageHeader)
+	binary.Write(writer, binary.BigEndian, m.msg)
+	writer.Flush()
+	return buf.Bytes()
 }
