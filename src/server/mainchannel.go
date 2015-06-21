@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -43,31 +44,30 @@ var upgrader = websocket.Upgrader{
 	Subprotocols:    []string{"tunnel-protocol"},
 }
 
-func (devConn *DeviceConn) Close(s *ServerHttpd) {
-	s.Lock()
-	defer func() {
-		s.Unlock()
-	}()
-
-	if devConn.isClosed {
+func (devConn *DeviceConn) CloseInner(s *ServerHttpd) {
+	// if isClosed == 1
+	if !atomic.CompareAndSwapInt32(&devConn.isClosed, 0, 1) {
 		return
 	}
-	devConn.isClosed = true
-
 	devConn.mainWs.Close()
 	close(devConn.writeMsg)
 
 	if len(devConn.u) > 0 {
-		if userMgr, ok := s.users[devConn.u]; ok {
-			userMgr.UnregistConn(devConn.u, devConn.deviceId)
-			delete(s.users, devConn.u)
+		if userMgr, ok := s.bus.users[devConn.u]; ok {
+			userMgr.UnregistDevice(devConn.deviceId)
+			delete(s.bus.users, devConn.u)
 		}
 	}
 	for k, v := range devConn.wsMap {
+		//TODO close userConn
 		v.ws.Close()
 		close(v.writeMsg)
 		delete(devConn.wsMap, k)
 	}
+}
+
+func (devConn *DeviceConn) Close(s *ServerHttpd) {
+	s.bus.CallNoWait(devConn.CloseInner, s)
 }
 
 func (devConn *DeviceConn) write(mt int, payload []byte) error {
@@ -75,45 +75,43 @@ func (devConn *DeviceConn) write(mt int, payload []byte) error {
 	return devConn.mainWs.WriteMessage(mt, payload)
 }
 
-func (devConn *DeviceConn) writePump(s *ServerHttpd) {
-	defer func() {
-		devConn.Close(s)
-	}()
-
-	for {
-		select {
-		case msg := <-devConn.writeMsg:
-			log.Println("begin write back message", len(msg))
-			err := devConn.write(websocket.BinaryMessage, msg)
-			if nil != err {
-				log.Println("write message error ", err.Error())
-				return
-			}
-			break
-		}
+func (devConn *DeviceConn) RegistDeviceInner(s *ServerHttpd, user string, pass string) {
+	if usrMgr, ok := s.bus.users[user]; ok {
+		usrMgr.RegistDevice(devConn)
+	} else {
+		usrMgr = NewUser(s.bus, user, pass)
+		s.bus.users[user] = usrMgr
+		usrMgr.RegistDevice(devConn)
 	}
 }
 
 func (devConn *DeviceConn) registDev(s *ServerHttpd, user string, pass string) {
-	defer func() {
-		s.Unlock()
-	}()
-	s.Lock()
+	s.bus.Call(devConn.RegistDeviceInner, s, user, pass)
+}
 
-	if usrMgr, ok := s.users[user]; ok {
-		usrMgr.RegistDevice(devConn)
-	} else {
-		usrMgr = NewUser(s.bus, user, pass)
-		s.users[user] = usrMgr
-		usrMgr.RegistDevice(devConn)
+func (devConn *DeviceConn) writePump(s *ServerHttpd) {
+	defer devConn.Close(s)
+
+	for {
+		select {
+		case msg, ok := <-devConn.writeMsg:
+			if ok {
+				log.Println("begin write back message", len(msg))
+				err := devConn.write(websocket.BinaryMessage, msg)
+				if nil != err {
+					log.Println("write message error ", err.Error())
+					return
+				}
+			} else {
+				log.Println("got write channel error ")
+			}
+		}
 	}
 }
 
 //TODO http://stackoverflow.com/questions/23174362/packing-struct-in-golang-in-bytes-to-talk-with-c-application
 func (devConn *DeviceConn) readPump(s *ServerHttpd) {
-	defer func() {
-		devConn.Close(s)
-	}()
+	defer devConn.Close(s)
 
 	devConn.mainWs.SetReadLimit(maxMessageSize)
 	devConn.mainWs.SetReadDeadline(time.Now().Add(pongWait))
@@ -172,7 +170,7 @@ func (devConn *DeviceConn) readPump(s *ServerHttpd) {
 }
 
 func serveMainChannel(s *ServerHttpd, w http.ResponseWriter, r *http.Request) (int, error) {
-	log.Println("in serveMainChannel")
+	//log.Println("in serveMainChannel")
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -180,7 +178,7 @@ func serveMainChannel(s *ServerHttpd, w http.ResponseWriter, r *http.Request) (i
 	}
 	s.context.Logger.Info("Got new connection\n")
 
-	devConn := &DeviceConn{mainWs: ws, wsMap: make(map[string]*UserConn), writeMsg: make(chan []byte, 100), isClosed: false}
+	devConn := &DeviceConn{mainWs: ws, wsMap: make(map[string]*UserConn), writeMsg: make(chan []byte, 100), isClosed: 0}
 	go devConn.writePump(s)
 	devConn.readPump(s)
 

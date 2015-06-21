@@ -35,8 +35,9 @@ type MsgHandshake struct {
 }
 
 type MsgTunnel struct {
-	lanAddr uint32
-	lanPort uint32
+	sessionId uint32
+	lanAddr   uint32
+	lanPort   uint32
 }
 
 type Message struct {
