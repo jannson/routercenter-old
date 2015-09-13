@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" dir="ltr">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <title>设备列表</title>
+    <script src="/static/jquery.min.js"></script>
+    <script>
+    $(document).ready(function () {
+      $.get("/__devlist", function(result){
+          keys = result;
+          for(var i = 0; i < keys.length; i++) {
+            $("#divList ul").append('<li><a href="/__telnet?d='+ keys[i] + '"><span> Telnet路由器: ' + keys[i] + '</span></a></li>');
+            $("#divList ul").append('<li><a href="/__telnet?d='+ keys[i] + '&net=1"><span> Telnet内网主机: ' + keys[i] + '</span></a></li>');
+	    $("#divList ul").append('<li></li><li>远程电脑需要在电脑上配置vnc server</li>');
+            $("#divList ul").append('<li><a href="/__vnc?d='+ keys[i] + '"><span> VNC to: ' + keys[i] + '</span></a></li>');
+          }
+      });
+    });
+    </script>
+  </head>
+<body>
+    <div id="divList">
+    <ul>
+    </ul>
+    </div>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<title>WebShell tunnel</title>
+<!--
+  term.js
+  Copyright (c) 2012-2013, Christopher Jeffrey (MIT License)
+-->
+<style>
+  html {
+    background: #555;
+  }
+
+  h1 {
+    margin-bottom: 20px;
+    font: 20px/1.5 sans-serif;
+  }
+
+  .terminal {
+    float: left;
+    border: #475A5F solid 5px;
+    font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+    font-size: 11px;
+    color: #f0f0f0;
+    background: #475A5F;
+  }
+
+  .terminal-cursor {
+    color: #000;
+    background: #f0f0f0;
+  }
+</style>
+<h1>Webshell tunnel</h1>
+<form id="ajaxform" name="ajaxform" action="/__telnet3" method="POST">
+<div>
+    <input type="text" value="" placeholder="外网host" name="host" id="host"/>
+    <input type="text" value="" placeholder="用户名" name="user" id="user"/>
+    <input type="password" value="" placeholder="密码" name="pass" id="pass"/><br/>
+    <input type="text" value="" placeholder="服务器端口" name="ssport" id="ssport"/>
+    <input type="text" value="" placeholder="加密方式" name="ssmethod" id="ssmethod"/>
+    <input type="button" value="连接" onclick="onconnecting();"/>
+</div>
+</form>
+<div id="webshell">
+</div>
+<div>
+<textarea cols="60" rows="3" wrap="off" id="textToSend" style="width:99%; font-family:'Courier New', Courier, mono; font-size:11px;background:#475A5F;color:#FFFFFF;"></textarea>
+<input type="button" id="send" onclick='sendBlock();' value="发送"/>
+</div>
+<script src="/static/jquery.min.js"></script>
+<script src="/static/telnet/base64.js"></script>
+<script src="/static/telnet/util.js"></script>
+<script src="/static/telnet/websock.js"></script>
+<script src="/static/telnet/webutil.js"></script> 
+<script src="/static/telnet/keysym.js"></script> 
+<script src="/static/telnet/term.js"></script>
+<script>
+
+var ws, term, sQ = [];
+function get_appropriate_ws_url() {
+    var pcol;
+    var u = document.URL;
+    /*
+     * We open the websocket encrypted if this page came on an
+     * https:// url itself, otherwise unencrypted
+     */
+    if (u.substring(0, 5) == "https") {
+       pcol = "wss://";
+        u = u.substr(8);
+    } else {
+        pcol = "ws://";
+    if (u.substring(0, 4) == "http")
+        u = u.substr(7);
+    }
+    u = u.split('/');
+    return pcol + u[0];
+}
+
+;(function() {
+  window.onload = function() {
+    ws = new Websock();
+    ws.on('open', function(e) {
+      term = new Terminal({
+        cols: 180,
+        rows: 50,
+        useStyle: true,
+        screenKeys: true,
+        cursorBlink: false
+      });
+
+      term.on('data', function(data) {
+          var tosend = [];
+          for(var i = 0; i < data.length; i++) {
+            tosend.push(data.charCodeAt(i));
+          }
+          ws.send(tosend);
+      });
+
+      term.on('title', function(title) {
+        document.title = title;
+      });
+
+      term.open(document.getElementById("webshell"));
+
+      //term.write('\x1b[31mWelcome to term.js!\x1b[m\r\n');
+    });
+
+    ws.on('close', function(e) {
+        term.destroy();
+    });
+    ws.on('error', function(e) {
+        term.destroy();
+    });
+
+    ws.on('message', function(e) {
+        var arr = ws.rQshiftStr();
+        term.write(arr);
+    });
+
+  };
+
+}).call(this);
+
+function onconnecting() {
+    var postData = $("#ajaxform").serialize();
+    var formURL = $("#ajaxform").attr("action");
+    $.ajax( {
+        url : formURL,
+        type: "POST",
+        data : postData,
+        success:function(data, textStatus, jqXHR) {
+            wan = document.getElementById("host").value;
+            uri = "ws://" + wan + ":8006" + "/__pty";
+            ws.open(uri, "binary");
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert(textStatus);
+        }
+    });
+}
+
+function sendBlock() {
+  var tv = document.getElementById("textToSend");
+  var data = tv.value + "\n";
+  var tosend = [];
+  for(var i = 0; i < data.length; i++) {
+    tosend.push(data.charCodeAt(i));
+  }
+  ws.send(tosend);
+  tv.value = "";
+}
+</script>
